@@ -1325,9 +1325,58 @@ static int rtw_wx_set_freq(struct net_device *dev,
 			     struct iw_request_info *info, 
 			     union iwreq_data *wrqu, char *extra)
 {	
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+	HAL_DATA_TYPE *hal_data = GET_HAL_DATA(padapter);
+	struct	mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
+	struct wlan_network  *cur_network = &(pmlmepriv->cur_network);
+	int exp = 1, freq = 0, div = 0;
+
 	_func_enter_;
 
 	RT_TRACE(_module_rtl871x_mlme_c_, _drv_notice_, ("+rtw_wx_set_freq\n"));
+
+	if (wrqu->freq.m <= 1000) {
+		if (wrqu->freq.flags == IW_FREQ_AUTO) {
+			if (rtw_ch_set_search_ch(padapter->mlmeextpriv.channel_set, wrqu->freq.m) > 0) {
+				padapter->mlmeextpriv.cur_channel = wrqu->freq.m;
+				DBG_871X("%s: channel is auto, set to channel %d\n", __func__, wrqu->freq.m);
+			} else {
+				padapter->mlmeextpriv.cur_channel = 1;
+				DBG_871X("%s: channel is auto, Channel Plan don't match just set to channel 1\n", __func__);
+			}
+		} else {
+			padapter->mlmeextpriv.cur_channel = wrqu->freq.m;
+			DBG_871X("%s: set to channel %d\n", __func__, padapter->mlmeextpriv.cur_channel);
+		}
+	} else {
+		while (wrqu->freq.e) {
+			exp *= 10;
+			wrqu->freq.e--;
+		}
+
+		freq = wrqu->freq.m;
+
+		while (!(freq%10)) {
+			freq /= 10;
+			exp *= 10;
+		}
+
+		/* freq unit is MHz here */
+		div = 1000000/exp;
+
+		if (div)
+			freq /= div;
+		else {
+			div = exp/1000000;
+			freq *= div;
+		}
+
+		/* If freq is invalid, rtw_freq2ch() will return channel 1 */
+		padapter->mlmeextpriv.cur_channel = rtw_freq2ch(freq);
+		DBG_871X("%s: set to channel %d\n", __func__, padapter->mlmeextpriv.cur_channel);
+	}
+
+	set_channel_bwmode(padapter, padapter->mlmeextpriv.cur_channel, HAL_PRIME_CHNL_OFFSET_DONT_CARE, CHANNEL_WIDTH_20);
 
 	_func_exit_;
 	
